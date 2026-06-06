@@ -1,0 +1,27 @@
+/chat.md
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python caches and bytecode
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Project and test caches
+cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+
+# Results and logs
+results/**/*
+!results/**/
+!results/**/.gitkeep
+CHANGES.md
+changes_log_prod.md
