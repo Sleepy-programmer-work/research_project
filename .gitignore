@@ -1,27 +1,83 @@
-/chat.md
+```
+# Microsoft Office files
+*.docx
+*.doc
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.accdb
+*.mdb
+*.pub
+*.vsd
+*.vsdx
 
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
-
-# Python caches and bytecode
-**/__pycache__/
-*.py[cod]
-*$py.class
-
-# Project and test caches
-cache/
-.pytest_cache/
-.ipynb_checkpoints/
-
-# OS files
+# Temporary files
+*.tmp
+*~
 .DS_Store
+Thumbs.db
 
-# Results and logs
-results/**/*
-!results/**/
-!results/**/.gitkeep
-CHANGES.md
-changes_log_prod.md
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+target/
+*.pyc
+*.class
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```
