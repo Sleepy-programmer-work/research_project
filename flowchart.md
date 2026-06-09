@@ -16,56 +16,56 @@ graph TD
     classDef process fill:#fff3e0,stroke:#ff9800,stroke-width:2px;
 
     %% STAGE 1 Nodes
-    Start([Start: Video Path]) --> OpenStream[Open Video Capture Stream<br/><b>cv2.VideoCapture</b><br/><i>Already Existed</i>]:::existing
-    OpenStream --> ReadFrame[Read Next Frame<br/><b>cap.read()</b><br/><i>Already Existed</i>]:::existing
+    Start([Start: Video Path]) --> OpenStream["Open Video Capture Stream<br/><b>cv2.VideoCapture</b><br/><i>Already Existed</i>"]:::existing
+    OpenStream --> ReadFrame["Read Next Frame<br/><b>cap.read()</b><br/><i>Already Existed</i>"]:::existing
     
-    ReadFrame -- Frame is None / EOF --> Stage2Start[Transition to Stage 2]:::process
-    ReadFrame -- Valid Frame --> DegCheck{Degenerate Frame?<br/>(Mean Brightness / Var Check)<br/><b>cv2.cvtColor, np.mean, np.var</b><br/><i>NEW</i>}:::new
+    ReadFrame -- Frame is None / EOF --> Stage2Start["Transition to Stage 2"]:::process
+    ReadFrame -- Valid Frame --> DegCheck{"Degenerate Frame?<br/>(Mean Brightness / Var Check)<br/><b>cv2.cvtColor, np.mean, np.var</b><br/><i>NEW</i>"}:::new
     
-    DegCheck -- Yes --> DropDeg[Drop Frame & Increment Counter<br/><i>NEW</i>]:::new
+    DegCheck -- Yes --> DropDeg["Drop Frame & Increment Counter<br/><i>NEW</i>"]:::new
     DropDeg --> ReadFrame
     
-    DegCheck -- No --> Resize[Resize to 256x144 Thumbnail<br/><b>cv2.resize (INTER_AREA)</b><br/><i>Already Existed</i>]:::existing
-    Resize --> FirstFrameCheck{First Frame?}:::existing
+    DegCheck -- No --> Resize["Resize to 256x144 Thumbnail<br/><b>cv2.resize (INTER_AREA)</b><br/><i>Already Existed</i>"]:::existing
+    Resize --> FirstFrameCheck{"First Frame?"}:::existing
     
-    FirstFrameCheck -- Yes --> AddCandidate[Add Frame to Candidate Pool<br/><i>Already Existed</i>]:::existing
-    FirstFrameCheck -- No --> GridSSIM[Compute 2x2 Grid-SSIM Quadrants<br/><b>skimage.metrics.structural_similarity</b><br/><i>NEW</i>]:::new
+    FirstFrameCheck -- Yes --> AddCandidate["Add Frame to Candidate Pool<br/><i>Already Existed</i>"]:::existing
+    FirstFrameCheck -- No --> GridSSIM["Compute 2x2 Grid-SSIM Quadrants<br/><b>skimage.metrics.structural_similarity</b><br/><i>NEW</i>"]:::new
     
-    GridSSIM --> MinSSIMCheck{Min Quadrant SSIM < Threshold?<br/><i>NEW</i>}:::new
+    GridSSIM --> MinSSIMCheck{"Min Quadrant SSIM < Threshold?<br/><i>NEW</i>"}:::new
     
     MinSSIMCheck -- No (Static / Redundant) --> ReadFrame
     MinSSIMCheck -- Yes (Visual Transition) --> AddCandidate
     
-    AddCandidate --> UpdateRef[Update SSIM Reference Image<br/><i>Already Existed</i>]:::existing
-    UpdateRef --> MaxCandidatesCheck{Candidates >= 2000?<br/><i>NEW</i>}:::new
+    AddCandidate --> UpdateRef["Update SSIM Reference Image<br/><i>Already Existed</i>"]:::existing
+    UpdateRef --> MaxCandidatesCheck{"Candidates >= 2000?<br/><i>NEW</i>"}:::new
     
     MaxCandidatesCheck -- Yes --> Stage2Start
     MaxCandidatesCheck -- No --> ReadFrame
 
     %% STAGE 2 Nodes
-    Stage2Start --> LoadEmbedder[Load MobileCLIP Singleton on CPU<br/><b>open_clip.create_model_and_transforms</b><br/><i>NEW</i>]:::new
-    LoadEmbedder --> MicroBatch[Micro-Batch Frames (size=16)<br/><b>PIL.Image.fromarray, torch.stack</b><br/><i>NEW</i>]:::new
-    MicroBatch --> GenEmbeddings[Generate L2-Normalized Embeddings<br/><b>model.encode_image, features.norm</b><br/><i>NEW</i>]:::new
+    Stage2Start --> LoadEmbedder["Load MobileCLIP Singleton on CPU<br/><b>open_clip.create_model_and_transforms</b><br/><i>NEW</i>"]:::new
+    LoadEmbedder --> MicroBatch["Micro-Batch Frames (size=16)<br/><b>PIL.Image.fromarray, torch.stack</b><br/><i>NEW</i>"]:::new
+    MicroBatch --> GenEmbeddings["Generate L2-Normalized Embeddings<br/><b>model.encode_image, features.norm</b><br/><i>NEW</i>"]:::new
     
-    GenEmbeddings --> AnchorSelection[Select First Candidate as Anchor<br/><i>NEW</i>]:::new
-    AnchorSelection --> FPSToop{Need More Frames?<br/>(Check Target K or Pool Exhaustion)<br/><i>NEW</i>}:::new
+    GenEmbeddings --> AnchorSelection["Select First Candidate as Anchor<br/><i>NEW</i>"]:::new
+    AnchorSelection --> FPSToop{"Need More Frames?<br/>(Check Target K or Pool Exhaustion)<br/><i>NEW</i>"}:::new
     
-    FPSToop -- Yes --> ComputeDistances[Compute Cosine Distance to Selected Set<br/><b>1.0 - np.dot(embeddings[i], embeddings[j])</b><br/><i>NEW</i>]:::new
+    FPSToop -- Yes --> ComputeDistances["Compute Cosine Distance to Selected Set<br/><b>1.0 - np.dot(embeddings[i], embeddings[j])</b><br/><i>NEW</i>"]:::new
     
-    ComputeDistances --> FindMaxMin[Find Candidate Maximizing Min Distance<br/><i>NEW</i>]:::new
+    ComputeDistances --> FindMaxMin["Find Candidate Maximizing Min Distance<br/><i>NEW</i>"]:::new
     
-    FindMaxMin --> AdaptiveCheck{Adaptive Mode &<br/>Best Distance < min_distance?<br/><i>NEW</i>}:::new
+    FindMaxMin --> AdaptiveCheck{"Adaptive Mode &<br/>Best Distance < min_distance?<br/><i>NEW</i>"}:::new
     
-    AdaptiveCheck -- Yes --> EarlyStop[Trigger Early Stopping<br/><i>NEW</i>]:::new
-    AdaptiveCheck -- No --> AcceptFrame[Accept Candidate Frame<br/><i>NEW</i>]:::new
+    AdaptiveCheck -- Yes --> EarlyStop["Trigger Early Stopping<br/><i>NEW</i>"]:::new
+    AdaptiveCheck -- No --> AcceptFrame["Accept Candidate Frame<br/><i>NEW</i>"]:::new
     
     AcceptFrame --> FPSToop
     
-    FPSToop -- No (K reached / pool empty) --> SortSelected[Sort Selected Indices Temporally<br/><b>list.sort()</b><br/><i>Already Existed</i>]:::existing
+    FPSToop -- No (K reached / pool empty) --> SortSelected["Sort Selected Indices Temporally<br/><b>list.sort()</b><br/><i>Already Existed</i>"]:::existing
     EarlyStop --> SortSelected
     
-    SortSelected --> ReleaseMemory[Release Candidate Cache & GC<br/><b>gc.collect()</b><br/><i>NEW</i>]:::new
-    ReleaseMemory --> ReturnResult([Return Frames & Telemetry Dict]):::process
+    SortSelected --> ReleaseMemory["Release Candidate Cache & GC<br/><b>gc.collect()</b><br/><i>NEW</i>"]:::new
+    ReleaseMemory --> ReturnResult(["Return Frames & Telemetry Dict"]):::process
 ```
 
 ---
