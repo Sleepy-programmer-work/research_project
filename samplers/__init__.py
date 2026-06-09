@@ -4,6 +4,7 @@ from .fps2 import FPS2Sampler
 from .random_sampler import RandomSampler
 from .ssim import SSIMSampler, SSIMSamplerResult
 from .dsis import DSISSampler
+from .tass import TASSSampler
 
 __all__ = [
     "BaseSampler",
@@ -13,4 +14,5 @@ __all__ = [
     "SSIMSampler",
     "SSIMSamplerResult",
     "DSISSampler",
+    "TASSSampler",
 ]

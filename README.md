@@ -65,15 +65,15 @@ The core research question:
 
 > *"Can adaptive frame selection significantly reduce computational cost while maintaining caption quality on edge hardware?"*
 
-**Current Phase**: Baseline benchmarking — establishing quality-efficiency measurements for sampling strategies (uniform, random, and SSIM adaptive) to create a rigorous comparison baseline before proposing more sophisticated algorithms.
+**Current Phase**: TASS Integration & Evaluation — evaluating the Two-Stage Adaptive Semantic Sampling (TASS) algorithm against the baseline benchmarking configurations.
 
-**Future Extension**: **TASS** (Two-Stage Adaptive Semantic Sampling) — a novel content-aware sampling algorithm that uses lightweight visual similarity metrics to select maximally informative frames.
+**Core Contribution**: **TASS** (Two-Stage Adaptive Semantic Sampling) — a novel content-aware sampling algorithm that uses lightweight visual similarity metrics to select maximally informative frames.
 
 ---
 
 ## 2. Current Project Status
 
-The project is in the **Baseline Benchmarking Phase**. The table below distinguishes between what is implemented and operational versus what is planned for future research phases.
+The project has transitioned from baseline benchmarking to full TASS implementation. The table below distinguishes between what is implemented and operational versus what is planned for future research phases.
 
 ### Implemented Features ✓
 
@@ -87,6 +87,8 @@ The project is in the **Baseline Benchmarking Phase**. The table below distingui
 | FPS-2 Sampling | ✅ Implemented | 2 frames per second uniform extraction |
 | Random Sampling | ✅ Implemented | Seeded random frame selection matching FPS-1 frame budget |
 | SSIM Sampling (ssim_085/090/095) | ✅ Implemented | Structural similarity scene-change detection; adaptive temporal baseline. Three threshold variants (0.85, 0.90, 0.95). CPU-only streaming. TASS Stage 1 interface. |
+| TASS Algorithm | ✅ Implemented | Two-Stage Adaptive Semantic Sampling — the core research contribution |
+| MobileCLIP Integration | ✅ Implemented | Lightweight embedding model for semantic frame similarity |
 | Raw Aggregation | ✅ Implemented | Sequential concatenation of all frame captions |
 | Temporal Aggregation | ✅ Implemented | Jaccard similarity–based deduplication of consecutive captions |
 | Centroid Aggregation | ✅ Implemented | Selects the single most representative caption via pairwise similarity |
@@ -101,12 +103,10 @@ The project is in the **Baseline Benchmarking Phase**. The table below distingui
 
 | Feature | Status | Notes |
 |---|---|---|
-| TASS Algorithm | 🔲 Planned | Two-Stage Adaptive Semantic Sampling — the core research contribution |
-| MobileCLIP Integration | 🔲 Planned | Lightweight embedding model for semantic frame similarity |
 | MSR-VTT Dataset | 🔲 Planned | Second evaluation dataset for cross-corpus generalization |
 | Cross-Hardware Portability | 🔲 Planned | Apple M1 (MPS backend) comparative experiments |
 
-> **⚠️ Important**: The features in the "Planned" table exist only as empty stub classes or are entirely absent from the codebase. Do NOT reference them as functional. They appear exclusively in [Section 17: Future Research Roadmap](#17-future-research-roadmap).
+> **⚠️ Important**: The features in the "Planned" table exist only as conceptual designs or future work descriptions. Do NOT reference them as functional. They appear exclusively in [Section 17: Future Research Roadmap](#17-future-research-roadmap).
 
 ---
 
@@ -530,6 +530,51 @@ Sampling determines **which frames** from the video are sent to the VLM for capt
 | Limitations | May cluster frames in time (no spacing guarantee), may miss key events. Falls back to FPS-1 if metadata is corrupted (`total_frames ≤ 0` or `fps ≤ 0`). |
 
 **Design Decision**: Random sampling uses the same frame budget as FPS-1 to enable a fair quality comparison. If random sampling achieves comparable quality, it suggests that temporal uniformity provides no intrinsic advantage — an important finding for the research.
+
+### SSIM Sampling
+
+**Implementation**: `samplers/ssim.py` → `SSIMSampler`
+
+**Algorithm**:
+1. Open the video and decode frames.
+2. Downsample frames to $256 \times 144$ to minimize CPU overhead.
+3. Compute the Structural Similarity Index (SSIM) between consecutive frames using `scikit-image`.
+4. If the SSIM falls below the configured threshold (e.g., `ssim_085`, `ssim_090`, or `ssim_095`), register a scene change and select the frame.
+5. Save frame selection metadata to `results/frame_selection/` and return `SSIMSamplerResult`.
+
+| Property | Value |
+|---|---|
+| Thresholds | `0.85`, `0.90`, `0.95` |
+| Computational cost | Moderate CPU computation for SSIM on downsampled frames |
+| Deterministic? | Yes |
+| Advantages | Captures visual scene shifts and temporal boundaries, dropping redundant adjacent frames |
+| Limitations | Blind to semantic meaning (e.g. two visually distinct scenes could describe the same semantic action, or moving objects might not trigger SSIM if the background is static) |
+
+---
+
+### TASS (Two-Stage Adaptive Semantic Sampling)
+
+**Implementation**: `samplers/tass.py` → `TASSSampler`
+
+**Algorithm**:
+* **Stage 1 — Streaming Degenerate Purge + Grid-SSIM Pre-filter**:
+  1. *Degenerate Purge*: Filters out frames with extreme brightness/variance (flash, fade, dark lens-caps) using fast NumPy threshold checks.
+  2. *2×2 Grid-SSIM Quadrant Filter*: Divides downsampled frames into a 2×2 grid, computes SSIM independently per quadrant, and takes the *minimum* score. This avoids foreground motion being masked by a static background.
+* **Stage 2 — Semantic Refinement via Farthest-Point Selection (FPS)**:
+  1. *MobileCLIP Embeddings*: Encodes candidate frames into 512-dimensional, L2-normalized vectors using a CPU-only singleton model (`MobileCLIPEmbedder`).
+  2. *Greedy Farthest-Point Selection*: Iteratively selects the frame that maximizes the minimum cosine distance to the already selected set, ensuring optimal coverage of the semantic space.
+
+**Modes**:
+* `fixed`: Selects exactly $K = \lceil duration\_seconds \rceil$ frames to match the FPS-1 uniform budget, isolating algorithmic efficiency.
+* `adaptive`: Halts early if the minimum cosine distance of the next candidate drops below `min_distance` (default: 0.10), preventing forced selection of redundant content.
+
+| Property | Value |
+|---|---|
+| Configuration Names | `tass_fixed`, `tass_adaptive` |
+| Embedding Model | `MobileCLIP-S1` (runs exclusively on CPU, consuming ~85 MB RAM) |
+| Deterministic? | Yes |
+| Advantages | Minimizes VLM calls while maximizing semantic coverage; avoids VRAM footprint on edge GPUs |
+| Limitations | Stage 2 requires CPU inference for the embedding model (mitigated via singleton load and mini-batching) |
 
 ---
 
@@ -1287,27 +1332,7 @@ generate_plots("results/csv/results_XXXXXXXX_XXXXXX.csv")
 
 ## 17. Future Research Roadmap
 
-> **⚠️ IMPORTANT**: Everything in this section describes **planned research extensions** that are **NOT currently implemented**. They exist only as empty stub classes, conceptual designs, or future work descriptions.
-
-### TASS — Two-Stage Adaptive Semantic Sampling (Planned)
-
-**Concept**: The core research contribution of this project (beyond baseline benchmarking).
-
-**Stage 1 — Coarse Selection**: Use SSIM or histogram-based visual similarity to identify candidate keyframes at scene boundaries.
-
-**Stage 2 — Semantic Refinement**: Use a lightweight embedding model (MobileCLIP) to compute semantic similarity between candidate frames, then select the maximally diverse subset.
-
-**Research hypothesis**: Two-stage sampling can achieve caption quality comparable to FPS-2 (dense sampling) while using fewer frames than FPS-1 (sparse sampling), because it selects frames based on *information content* rather than *temporal position*.
-
-**Current state**: Not implemented. Depends on SSIM sampling and MobileCLIP integration.
-
-### MobileCLIP Integration (Planned)
-
-**Concept**: Apple's MobileCLIP is a lightweight CLIP variant optimized for mobile/edge deployment. It produces semantic embeddings that enable measuring *conceptual* similarity between frames (e.g., "two frames both show a dog" vs. "one frame shows a dog, the other shows a ball").
-
-**Purpose in TASS**: Used in Stage 2 to compute semantic diversity among candidate frames selected by Stage 1.
-
-**Current state**: Not implemented.
+> **⚠️ IMPORTANT**: Everything in this section describes **planned research extensions** that are **NOT currently implemented**. They exist only as conceptual designs or future work descriptions.
 
 ### MSR-VTT Dataset Integration (Planned)
 

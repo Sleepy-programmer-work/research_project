@@ -17,7 +17,7 @@ from collections import defaultdict
 
 from config.settings import settings
 from utils.gpu import flush_vram
-from samplers import FPS1Sampler, FPS2Sampler, RandomSampler, SSIMSampler, SSIMSamplerResult, DSISSampler
+from samplers import FPS1Sampler, FPS2Sampler, RandomSampler, SSIMSampler, SSIMSamplerResult, DSISSampler, TASSSampler
 from aggregation import RawAggregator, CentroidAggregator, TemporalAggregator
 from models import VLMLoader, LLMLoader
 from pipeline import extract_frames, caption_frames, transcribe_audio, build_context, generate_final_caption
@@ -41,6 +41,15 @@ SSIM_VARIANTS = {
     "ssim_085": 0.85,   # aggressive — more frames, catches subtler transitions
     "ssim_090": 0.90,   # balanced   — recommended default for mixed-content video
     "ssim_095": 0.95,   # conservative — only major scene transitions
+}
+
+# TASS variant registry.
+# 'tass_fixed':    K = ceil(duration) — controlled comparison against FPS-1.
+# 'tass_adaptive': K varies per video — maximises semantic yield.
+# Both share the same threshold and min_distance defaults; adjust in YAML if needed.
+TASS_VARIANTS = {
+    "tass_fixed":    {"mode": "fixed",    "threshold": 0.90, "min_distance": 0.10},
+    "tass_adaptive": {"mode": "adaptive", "threshold": 0.90, "min_distance": 0.10},
 }
 
 
@@ -101,6 +110,23 @@ def get_samplers(cfg=None) -> dict:
             f"Benchmark matrix expanded to "
             f"{len([s for s in active_samplers if s in samplers])} samplers. "
             f"Tip: run --videos 10 --sampler ssim_090 before a full 50-video sweep."
+        )
+
+    # Register TASS variants that are listed in the YAML sampler list.
+    # MobileCLIP-S1 singleton is loaded on first sample() call — not here —
+    # so registering both variants does NOT double the 85 MB RAM allocation.
+    tass_count = 0
+    for variant_name, kwargs in TASS_VARIANTS.items():
+        if variant_name in active_samplers:
+            samplers[variant_name] = TASSSampler(**kwargs)
+            tass_count += 1
+
+    if tass_count > 0:
+        logger.info(
+            f"Registered {tass_count} TASS variant(s): "
+            f"{[v for v in TASS_VARIANTS if v in active_samplers]}. "
+            f"MobileCLIP-S1 (~85 MB CPU RAM) will load on first TASS sample call. "
+            f"VRAM budget unaffected (CPU-only inference)."
         )
 
     return samplers
@@ -433,7 +459,9 @@ def main():
     skipped_videos = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Schema columns definer
+    # Schema columns definer.
+    # TASS-specific columns (vlm_calls_saved_pct, semantic_yield) are appended
+    # for TASS rows; non-TASS rows receive NaN in these columns via pd.DataFrame.
     ROW_COLUMNS = [
         "video_id",
         "sampling_method",
@@ -441,14 +469,20 @@ def main():
         "caption_mode",
         "frames_selected",
         "processing_time_s",
-        "peak_vram_mb",           # absolute peak VRAM during pipeline
-        "peak_ram_delta_mb",      # incremental RAM above model-load baseline
-        "gpu_utilization_pct",    # peak GPU core utilisation % during pipeline
+        "peak_vram_mb",              # absolute peak VRAM during pipeline
+        "peak_ram_delta_mb",         # incremental RAM above model-load baseline
+        "gpu_utilization_pct",       # peak GPU core utilisation % during pipeline
         "cider",
         "bleu1",
         "bleu4",
         "rouge_l",
         "meteor",
+        # TASS IEEE-paper metrics — NaN for non-TASS rows
+        "tass_candidate_pool",       # Stage 1 candidate pool size (M)
+        "tass_degenerate_dropped",   # frames purged by degenerate filter
+        "tass_stopped_early",        # True if adaptive early-stopping fired
+        "vlm_calls_saved_pct",       # ((fps1_calls − tass_calls) / fps1_calls) × 100
+        "semantic_yield",            # CIDEr / max(1, vlm_calls)
     ]
 
     # Log benchmark matrix size warning for SSIM runs
@@ -499,14 +533,23 @@ def main():
                         with PeakResourceTracker(device_index=0) as tracker:
                             start_time = time.perf_counter()
                             
-                            # Stage 1 — frame extraction
-                            # For SSIMSampler: call sample_with_metadata() to capture
-                            # SSIM-specific metadata for the frame_selection JSON.
-                            # For all other samplers: use the standard extract_frames() path.
+                            # Stage 1 — frame extraction.
+                            #
+                            # Dispatch table:
+                            #   SSIMSampler  → sample_with_metadata() returns SSIMSamplerResult
+                            #                  (dataclass) for SSIM-specific JSON metadata.
+                            #   TASSSampler  → sample_with_metadata() returns a plain dict
+                            #                  with 'frames', 'indices', and 'meta' keys.
+                            #   All others   → extract_frames() via standard BaseSampler.sample().
                             ssim_result = None
+                            tass_meta = None
                             if isinstance(sampler, SSIMSampler):
                                 ssim_result = sampler.sample_with_metadata(video_path)
                                 frames = ssim_result.frames
+                            elif isinstance(sampler, TASSSampler):
+                                tass_result = sampler.sample_with_metadata(video_path)
+                                frames = tass_result["frames"]
+                                tass_meta = tass_result["meta"]
                             else:
                                 frames = extract_frames(video_path, video_id, sampler)
 
@@ -544,11 +587,14 @@ def main():
                         corpus_ground_truths[video_id] = raw_gts
                         
                         telemetry_data[video_id] = {
-                            "frames_selected": frames_selected,
+                            "frames_selected":  frames_selected,
                             "processing_time_s": elapsed,
-                            "peak_vram_mb": peak_vram,
+                            "peak_vram_mb":     peak_vram,
                             "peak_ram_delta_mb": peak_ram,
                             "gpu_utilization_pct": peak_util,
+                            # Carry TASS meta through to the metrics loop below
+                            # (None for non-TASS samplers — metrics loop checks).
+                            "tass_meta":        tass_meta,
                         }
                         
                     except Exception as e:
@@ -571,10 +617,28 @@ def main():
                 
                 metrics = compute_all_metrics(gts, res, corpus_idf)
                 
+                # Compute fps1 mean VLM calls from telemetry_data — used as the
+                # denominator in the VLM Calls Saved % metric.  Falls back to 1
+                # if fps1 was not run in this benchmark configuration.
+                fps1_mean_calls = max(
+                    1,
+                    int(
+                        np.mean(
+                            [
+                                v["frames_selected"]
+                                for v in telemetry_data.values()
+                                if s_name == "fps1"
+                            ]
+                        )
+                    )
+                    if s_name == "fps1" and telemetry_data
+                    else 1,
+                )
+
                 for video_id in corpus_predictions.keys():
                     telemetry = telemetry_data.get(video_id, {})
                     video_metrics = metrics.get(video_id, {})
-                    
+
                     scores = {
                         "cider":   video_metrics.get("cider", 0.0),
                         "bleu1":   video_metrics.get("bleu1", 0.0),
@@ -582,21 +646,53 @@ def main():
                         "rouge_l": video_metrics.get("rouge_l", 0.0),
                         "meteor":  video_metrics.get("meteor", 0.0),
                     }
-                    
+
+                    frames_sel = telemetry.get("frames_selected", 0)
+                    vid_tass_meta = telemetry.get("tass_meta")  # None for non-TASS rows
+
+                    # --- IEEE-paper TASS metrics ---
+                    # vlm_calls_saved_pct: percentage reduction in VLM inference calls
+                    #   relative to the FPS-1 baseline.  Positive means TASS saved calls.
+                    # semantic_yield: CIDEr score per VLM call — removes confounding from
+                    #   hardware timing variance on WSL2 (swap pressure, scheduler jitter).
+                    if vid_tass_meta is not None:
+                        vlm_calls = vid_tass_meta.get("vlm_calls", frames_sel)
+                        vlm_calls_saved_pct = (
+                            (fps1_mean_calls - vlm_calls) / fps1_mean_calls
+                        ) * 100.0
+                        semantic_yield = scores["cider"] / max(1, vlm_calls)
+                        tass_candidate_pool = vid_tass_meta.get("candidate_pool_size", None)
+                        tass_degenerate_dropped = vid_tass_meta.get(
+                            "frames_degenerate_dropped", None
+                        )
+                        tass_stopped_early = vid_tass_meta.get("tass_stopped_early", None)
+                    else:
+                        vlm_calls_saved_pct = float("nan")
+                        semantic_yield = float("nan")
+                        tass_candidate_pool = None
+                        tass_degenerate_dropped = None
+                        tass_stopped_early = None
+
                     res_row = {
-                        "video_id":            video_id,
-                        "sampling_method":     s_name,
-                        "aggregation_method":  a_name,
-                        "caption_mode":        c_mode,
-                        "frames_selected":     telemetry.get("frames_selected", 0),
-                        "processing_time_s":   telemetry.get("processing_time_s", 0.0),
-                        "peak_vram_mb":        telemetry.get("peak_vram_mb", 0.0),
-                        "peak_ram_delta_mb":   telemetry.get("peak_ram_delta_mb", 0.0),
-                        "gpu_utilization_pct": telemetry.get("gpu_utilization_pct", 0.0),
+                        "video_id":                video_id,
+                        "sampling_method":         s_name,
+                        "aggregation_method":      a_name,
+                        "caption_mode":            c_mode,
+                        "frames_selected":         frames_sel,
+                        "processing_time_s":       telemetry.get("processing_time_s", 0.0),
+                        "peak_vram_mb":            telemetry.get("peak_vram_mb", 0.0),
+                        "peak_ram_delta_mb":       telemetry.get("peak_ram_delta_mb", 0.0),
+                        "gpu_utilization_pct":     telemetry.get("gpu_utilization_pct", 0.0),
+                        # TASS-specific columns (NaN / None for non-TASS rows)
+                        "tass_candidate_pool":     tass_candidate_pool,
+                        "tass_degenerate_dropped": tass_degenerate_dropped,
+                        "tass_stopped_early":      tass_stopped_early,
+                        "vlm_calls_saved_pct":     vlm_calls_saved_pct,
+                        "semantic_yield":          semantic_yield,
                     }
                     res_row.update(scores)
-                    
-                    filtered_row = {col: res_row[col] for col in ROW_COLUMNS if col in res_row}
+
+                    filtered_row = {col: res_row.get(col) for col in ROW_COLUMNS}
                     results.append(filtered_row)
                     
     if skipped_videos:

@@ -36,6 +36,13 @@ __pycache__/
 .coverage
 coverage/
 htmlcov/
+cache/
+tests/
+
+# Results and logs
+results/**
+!results/**/
+!results/**/.gitkeep
 
 # Build artifacts
 dist/
@@ -80,4 +87,9 @@ target/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Change logs
+CHANGES.md
+changes_log_prod.md
+
 ```
