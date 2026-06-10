@@ -20,41 +20,54 @@ def caption_frames(
     """Generate or load cached per-frame captions for a video.
 
     Cache key format: {video_id}_{method_name}_{model_safe}_{revision_safe}.json
-    The cache key includes the VLM model ID and revision so that switching model
-    versions (e.g. moondream2@2024-08-26 → 2024-09-01) never silently reuses
-    stale captions.
+
+    The cache key is intentionally complete — it includes both the model ID and
+    the pinned revision.  Omitting either field recreates the original bug where
+    switching model versions silently reuses stale captions.
+
+    STARTUP GUARD: If vlm_revision resolves to an empty string this function
+    raises RuntimeError immediately rather than building a key without a revision
+    component.  An incomplete key is indistinguishable from any other run that
+    happened to use the same model name without a revision — exactly the bug
+    we are fixing.
 
     Args:
         video_id:      Unique video identifier (used as cache key prefix).
         frames:        BGR numpy frames to caption.
         vlm:           Loaded VLMLoader instance.
         method_name:   Sampler name (e.g. 'fps1', 'ssim_090').
-        vlm_model_id:  VLM model identifier (e.g. 'vikhyatk/moondream2').
-                       Defaults to the value in settings.models['vlm']['name'].
-        vlm_revision:  VLM revision/commit hash (e.g. '2024-08-26').
-                       Defaults to the value in settings.models['vlm']['revision'].
-                       If empty string, the revision component is omitted from the key.
+        vlm_model_id:  Override VLM model identifier. Defaults to settings.vlm_model_id.
+        vlm_revision:  Override VLM revision/commit hash. Defaults to settings.vlm_revision.
+                       Must never be empty — raises RuntimeError if it is.
     """
     cache_dir = Path(settings.experiment.get("cache_dir", "./cache")) / "frame_captions"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resolve model info from settings if not provided by caller.
     vlm_cfg = settings.models.get("vlm", {})
+
+    # Resolve model info — prefer explicit args, fall back to settings properties.
+    # settings.vlm_model_id and settings.vlm_revision have hardcoded fallbacks
+    # so they are always non-empty even if the YAML field is accidentally missing.
     if not vlm_model_id:
-        vlm_model_id = vlm_cfg.get("name", "unknown_model")
+        vlm_model_id = settings.vlm_model_id
     if not vlm_revision:
-        vlm_revision = vlm_cfg.get("revision", "")
+        vlm_revision = settings.vlm_revision  # raises RuntimeError if empty
+
+    # Guard: revision must be present — an empty revision corrupts the cache key.
+    if not vlm_revision:
+        raise RuntimeError(
+            f"vlm_revision is empty for {video_id}/{method_name}. "
+            f"Add 'revision: <commit-hash>' under models.vlm in benchmark.yaml. "
+            f"An empty revision would produce cache keys identical to any other run, "
+            f"causing silent reuse of stale captions across model versions."
+        )
 
     # Sanitize for use in filenames (replace path-unsafe characters).
     model_safe = vlm_model_id.replace("/", "_").replace(":", "_").replace(" ", "_")
     revision_safe = vlm_revision.replace("/", "_").replace(":", "_").replace(" ", "_")
 
-    # Build cache key — include revision only if one is specified.
-    if revision_safe:
-        cache_filename = f"{video_id}_{method_name}_{model_safe}_{revision_safe}.json"
-    else:
-        cache_filename = f"{video_id}_{method_name}_{model_safe}.json"
-
+    # Cache key always includes both model and revision — never omit either.
+    cache_filename = f"{video_id}_{method_name}_{model_safe}_{revision_safe}.json"
     cache_file = cache_dir / cache_filename
 
     if cache_file.exists():
@@ -68,7 +81,7 @@ def caption_frames(
 
     logger.debug(
         f"Generating frame captions for {video_id} ({method_name}) — "
-        f"model={vlm_model_id}, revision={vlm_revision or 'none'}"
+        f"model={vlm_model_id}@{vlm_revision}"
     )
 
     pil_images = []
