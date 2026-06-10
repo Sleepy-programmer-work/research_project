@@ -267,7 +267,7 @@ research_project/
 │   ├── fps2.py              # 2 frames-per-second uniform sampler
 │   ├── random_sampler.py    # Seeded random frame selection sampler
 │   ├── ssim.py              # SSIM scene-change sampler (streaming, CPU-only; TASS Stage 1)
-│   └── dsis.py              # [STUB] Placeholder for future DSIS sampler
+│   └── dsis.py              # [STUB] Placeholder for future DSIS sampler (excluded/stub)
 │
 ├── aggregation/             # Caption aggregation strategy implementations
 │   ├── __init__.py          # Public API: exports all aggregator classes
@@ -376,7 +376,7 @@ This section traces a single video through the complete pipeline, documenting th
 - **Dependencies**: OpenCV (`cv2`)
 - **Implementation**: `pipeline/frame_extraction.py` → delegates to `sampler.sample()`
 
-**What happens**: The selected sampler opens the video with OpenCV, reads frames according to its strategy (see [Section 7](#7-sampling-methods)), and returns them as a list. Frame selection metadata (indices) is saved to `results/frame_selection/{video_id}_{method}.json`.
+**What happens**: The selected sampler opens the video with OpenCV, reads frames according to its strategy (see [Section 7](#7-sampling-methods)), and returns them as a list. Frame selection metadata (including the actual frame indices within the video stream, recovered via sampler index tracking) is saved to `results/frame_selection/{video_id}_{method}.json`.
 
 **Failure modes**:
 - Corrupted video file → OpenCV returns `ret=False` on first read, resulting in an empty frame list
@@ -390,7 +390,7 @@ This section traces a single video through the complete pipeline, documenting th
 - **Dependencies**: Moondream2 (PyTorch, `transformers`), CUDA
 - **Implementation**: `pipeline/frame_captioning.py` → `VLMLoader.generate_captions()`
 
-**What happens**: Frames are converted from BGR (OpenCV) to RGB (PIL). Each frame is encoded by Moondream2's image encoder, then captioned with the prompt `"Describe this image in a short sentence."`. Results are cached to `cache/frame_captions/{video_id}_{method}.json` — subsequent runs skip inference entirely.
+**What happens**: Frames are converted from BGR (OpenCV) to RGB (PIL). Each frame is encoded by Moondream2's image encoder, then captioned with the prompt `"Describe this image in a short sentence."`. Results are cached to `cache/frame_captions/{video_id}_{method}_{model_safe}_{revision_safe}.json` — subsequent runs skip inference entirely. This ensures that changing models or pinning revisions avoids stale cache reuse.
 
 **Failure modes**:
 - CUDA OOM → batch size is halved automatically (down to 1), VRAM is flushed, and retried. If batch size 1 still OOMs, a placeholder caption is inserted.
@@ -421,7 +421,7 @@ This section traces a single video through the complete pipeline, documenting th
 
 - **Input**: `List[str]` (per-frame captions), `str` (audio transcript), aggregator instance, caption mode
 - **Output**: `str` — either the aggregated caption (VLM-only) or a constructed LLM prompt (VLM+LLM)
-- **Dependencies**: NLTK (`punkt`, `punkt_tab` tokenizers for temporal/centroid)
+- **Dependencies**: NLTK (`punkt`, `punkt_tab` tokenizers for temporal/centroid; dynamically resolved using standard NLTK search paths and downloaded to default user directories at runtime)
 - **Implementation**: `pipeline/context_builder.py`
 
 **What happens**: The aggregator combines multiple frame captions into a single textual representation (see [Section 8](#8-aggregation-methods)). In `vlm_only` mode, this aggregated text *is* the final caption. In `vlm_plus_llm` mode, the aggregated text is embedded into a strictly constrained LLM prompt alongside the audio transcript.
@@ -542,6 +542,11 @@ Sampling determines **which frames** from the video are sent to the VLM for capt
 4. If the SSIM falls below the configured threshold (e.g., `ssim_085`, `ssim_090`, or `ssim_095`), register a scene change and select the frame.
 5. Save frame selection metadata to `results/frame_selection/` and return `SSIMSamplerResult`.
 
+**Frame Reduction Calculation**:
+The frame reduction percentage is calculated as:
+$$\text{reduction\_pct} = \left(1.0 - \frac{\text{len(accepted\_frames)}}{\max(\text{total\_frames\_meta}, 1)}\right) \times 100.0$$
+where $\text{total\_frames\_meta}$ is the total frame count declared in the video container's metadata (e.g., via `CAP_PROP_FRAME_COUNT`), rather than the count of physically read/decoded frames. This ensures that any corrupted or truncated frames during decoding do not skew the reduction percentage calculation.
+
 | Property | Value |
 |---|---|
 | Thresholds | `0.85`, `0.90`, `0.95` |
@@ -562,7 +567,7 @@ Sampling determines **which frames** from the video are sent to the VLM for capt
   2. *2×2 Grid-SSIM Quadrant Filter*: Divides downsampled frames into a 2×2 grid, computes SSIM independently per quadrant, and takes the *minimum* score. This avoids foreground motion being masked by a static background.
 * **Stage 2 — Semantic Refinement via Farthest-Point Selection (FPS)**:
   1. *MobileCLIP Embeddings*: Encodes candidate frames into 512-dimensional, L2-normalized vectors using a CPU-only singleton model (`MobileCLIPEmbedder`).
-  2. *Greedy Farthest-Point Selection*: Iteratively selects the frame that maximizes the minimum cosine distance to the already selected set, ensuring optimal coverage of the semantic space.
+  2. *Greedy Farthest-Point Selection*: Iteratively selects the frame that maximizes the minimum cosine distance to the already selected set, ensuring optimal coverage of the semantic space (runs in $O(Mk)$ complexity where $M$ is the candidate pool size and $k$ is the selected frame budget, optimized with $O(1)$ set-based membership lookups).
 
 **Modes**:
 * `fixed`: Selects exactly $K = \lceil duration\_seconds \rceil$ frames to match the FPS-1 uniform budget, isolating algorithmic efficiency.
