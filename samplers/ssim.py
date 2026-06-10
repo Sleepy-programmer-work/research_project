@@ -80,10 +80,11 @@ class SSIMSamplerResult:
     """
     frames: List[np.ndarray]         # BGR frames at original capture resolution
     frame_indices: List[int]         # original frame indices in the source video
-    ssim_scores: List[float]         # SSIM score that triggered each frame's acceptance
-    original_frame_count: int
+    ssim_scores: List[Optional[float]]  # SSIM score per accepted frame; None = fallback (not computed)
+    original_frame_count: int        # frames physically read (may differ from metadata on corrupt files)
+    total_frames_meta: int           # frame count from cv2.CAP_PROP_FRAME_COUNT (used for reduction_pct)
     selected_frame_count: int
-    reduction_pct: float
+    reduction_pct: float             # (1 - selected / total_frames_meta) * 100 — metadata-normalised
     average_ssim: float
     threshold_used: float
     fps: float
@@ -339,7 +340,11 @@ class SSIMSampler(BaseSampler):
                 f"Threshold {self.threshold} is too low — falling back to FPS-1 output."
             )
             accepted_frames, accepted_indices = self._fps1_fallback(str(path), fps)
-            ssim_scores_at_accept = [0.0] * len(accepted_frames)
+            # P0-3 FIX: Use None sentinel, not 0.0.
+            # 0.0 means "completely dissimilar" in SSIM space — semantically wrong
+            # for frames that were never SSIM-compared (fallback path bypasses SSIM).
+            # Downstream code must check for None before using these as SSIM scores.
+            ssim_scores_at_accept = [None] * len(accepted_frames)
             fallback_used = True
 
         elif acceptance_rate > acceptance_rate_max:
@@ -369,7 +374,18 @@ class SSIMSampler(BaseSampler):
                 return self._empty_result()
 
         avg_ssim = float(np.mean(all_ssim_scores)) if all_ssim_scores else 1.0
-        reduction = (1.0 - len(accepted_frames) / max(actual_total, 1)) * 100.0
+        # P1-1 FIX: Use total_frames_meta (from cv2.CAP_PROP_FRAME_COUNT) as denominator,
+        # not actual_total (physically read frames).  actual_total decreases when a video
+        # has corrupt frames, making reduction_pct incomparable across videos with different
+        # corruption rates.  total_frames_meta is stable and dataset-wide consistent.
+        denom = max(total_frames_meta, 1) if total_frames_meta > 0 else max(actual_total, 1)
+        reduction = (1.0 - len(accepted_frames) / denom) * 100.0
+        if total_frames_meta > 0 and actual_total != total_frames_meta:
+            logger.debug(
+                f"[{self._name}] {path.name}: actual_total={actual_total} vs "
+                f"total_frames_meta={total_frames_meta} "
+                f"(corrupt frames detected). Using metadata count for reduction_pct."
+            )
 
         logger.info(
             f"[{self._name}] {path.name}: "
@@ -383,6 +399,7 @@ class SSIMSampler(BaseSampler):
             frame_indices=accepted_indices,
             ssim_scores=ssim_scores_at_accept,
             original_frame_count=actual_total,
+            total_frames_meta=total_frames_meta if total_frames_meta > 0 else actual_total,
             selected_frame_count=len(accepted_frames),
             reduction_pct=reduction,
             average_ssim=avg_ssim,
@@ -434,6 +451,7 @@ class SSIMSampler(BaseSampler):
             frame_indices=[],
             ssim_scores=[],
             original_frame_count=0,
+            total_frames_meta=0,
             selected_frame_count=0,
             reduction_pct=0.0,
             average_ssim=0.0,

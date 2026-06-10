@@ -13,29 +13,39 @@ class RandomSampler(BaseSampler):
         return "random"
 
     def sample(self, video_path: str) -> List[np.ndarray]:
+        """Randomly sample ceil(duration) frames at a fixed seed.
+
+        Populates self._last_sampled_indices with the actual randomly-selected
+        video frame positions so frame_extraction.py can write correct temporal
+        metadata to results/frame_selection/ JSON files.
+        """
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
-        
+
         if total_frames <= 0 or fps <= 0:
-            return FPS1Sampler().sample(video_path)
-            
+            # Fallback: delegate to FPS1Sampler and inherit its indices
+            fps1 = FPS1Sampler()
+            frames = fps1.sample(video_path)
+            self._last_sampled_indices = fps1.get_last_sampled_indices()
+            return frames
+
         target_count = max(1, int(np.ceil(total_frames / fps)))
-        
+
         random.seed(self.seed)
         np.random.seed(self.seed)
-        
+
         if target_count >= total_frames:
             indices = list(range(total_frames))
         else:
             indices = sorted(random.sample(range(total_frames), target_count))
-            
+
         cap = cv2.VideoCapture(video_path)
         frames = []
         frame_idx = 0
         target_idx = 0
-        
+
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -46,6 +56,7 @@ class RandomSampler(BaseSampler):
             frame_idx += 1
             if target_idx >= len(indices):
                 break
-                
+
         cap.release()
+        self._last_sampled_indices = indices  # actual video frame positions
         return frames

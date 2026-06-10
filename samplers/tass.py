@@ -332,6 +332,11 @@ class TASSSampler(BaseSampler):
         k_limit = target_k if self.mode == "fixed" else len(candidate_frames)
 
         selected_pool_indices: List[int] = [0]  # anchor: first candidate always selected
+        # P1-4 FIX: parallel set for O(1) membership testing.
+        # `if i in selected_pool_indices` on a list is O(k) per candidate,
+        # making the loop O(M²k). Using a set reduces it to O(Mk).
+        # For M=2000 candidates, k=100 selections: 200K ops instead of 400M.
+        selected_pool_set: set = {0}
         stopped_early = False
 
         for _ in range(k_limit - 1):
@@ -342,7 +347,7 @@ class TASSSampler(BaseSampler):
             best_dist: float = -1.0
 
             for i in range(len(embeddings)):
-                if i in selected_pool_indices:
+                if i in selected_pool_set:  # O(1) — set lookup
                     continue
 
                 # Cosine distance = 1 − dot(a, b) for L2-normalised vectors.
@@ -372,6 +377,7 @@ class TASSSampler(BaseSampler):
 
             if best_idx != -1:
                 selected_pool_indices.append(best_idx)
+                selected_pool_set.add(best_idx)  # keep set in sync
 
         # Sort selected pool indices to restore temporal ordering.
         # Greedy FPS selects frames in diversity order, not temporal order.

@@ -39,6 +39,38 @@ class Settings:
         return self.config.get("models", {})
 
     @property
+    def vlm_model_id(self) -> str:
+        """VLM model identifier used in cache keys and HuggingFace lookups.
+
+        Reads from models.vlm.name in the YAML.  Falls back to 'vikhyatk/moondream2'
+        so the field is always non-empty — an empty model ID would corrupt cache keys.
+        """
+        return self.config.get("models", {}).get("vlm", {}).get("name", "vikhyatk/moondream2")
+
+    @property
+    def vlm_revision(self) -> str:
+        """Pinned VLM revision/commit hash used in cache keys.
+
+        CACHE KEY CONTRACT: This value is baked into every frame-caption cache filename
+        as {video_id}_{method}_{model}_{revision}.json.  An absent or changed revision
+        must result in a different filename so old captions are NEVER silently reused.
+
+        Reads from models.vlm.revision in benchmark.yaml.  The hardcoded fallback
+        '2024-08-26' matches the revision currently pinned in the YAML — it exists
+        only as a safety net if the YAML key is accidentally deleted.  If you upgrade
+        the model, bump BOTH the YAML value and this fallback in the same commit.
+        """
+        revision = self.config.get("models", {}).get("vlm", {}).get("revision", "2024-08-26")
+        if not revision:
+            raise RuntimeError(
+                "settings.vlm_revision is empty. "
+                "Add 'revision: <commit-hash>' under models.vlm in benchmark.yaml. "
+                "An empty revision would corrupt frame-caption cache keys."
+            )
+        return revision
+
+
+    @property
     def pipeline(self) -> dict:
         return self.config.get("pipeline", {})
 

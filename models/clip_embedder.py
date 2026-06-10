@@ -162,4 +162,20 @@ class MobileCLIPEmbedder:
             del tensors, features
             gc.collect()
 
-        return np.vstack(all_embeddings)
+        result = np.vstack(all_embeddings)
+
+        # P1-2 ASSERTION: Verify all output embeddings are L2-normalised.
+        # TASS Stage 2 Greedy FPS computes cosine distance as 1 - dot(a, b),
+        # which equals true cosine distance ONLY when ||a|| = ||b|| = 1.
+        # If normalisation ever silently fails (e.g. due to a zero-norm vector),
+        # this assertion catches it before corrupt distances propagate.
+        if len(result) > 0:
+            norms = np.linalg.norm(result, axis=1)
+            assert np.allclose(norms, 1.0, atol=1e-5), (
+                f"MobileCLIP embeddings are not L2-normalised. "
+                f"Max norm deviation: {np.max(np.abs(norms - 1.0)):.2e}. "
+                f"This breaks TASS cosine distance calculations. "
+                f"Check for zero-norm input frames (blank / solid-colour)."
+            )
+
+        return result

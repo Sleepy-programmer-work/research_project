@@ -8,6 +8,7 @@ experiment:
 models:
   vlm:
     name: "vikhyatk/moondream2"
+    revision: "2024-08-26"          # Pin to exact HF commit — bump this when upgrading the model.
     fallback: "Salesforce/blip-image-captioning-base"
     batch_size: 4
   llm:

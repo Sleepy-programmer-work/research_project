@@ -17,7 +17,8 @@ from collections import defaultdict
 
 from config.settings import settings
 from utils.gpu import flush_vram
-from samplers import FPS1Sampler, FPS2Sampler, RandomSampler, SSIMSampler, SSIMSamplerResult, DSISSampler, TASSSampler
+from samplers import FPS1Sampler, FPS2Sampler, RandomSampler, SSIMSampler, SSIMSamplerResult, TASSSampler
+# DSISSampler intentionally excluded — it is a Phase 2 stub returning [] (see samplers/__init__.py)
 from aggregation import RawAggregator, CentroidAggregator, TemporalAggregator
 from models import VLMLoader, LLMLoader
 from pipeline import extract_frames, caption_frames, transcribe_audio, build_context, generate_final_caption
@@ -336,6 +337,7 @@ def _save_frame_selection_meta(
             "sampler":              sampler.get_name(),
             "video_id":             video_id,
             "original_frame_count": ssim_result.original_frame_count,
+            "total_frames_meta":    ssim_result.total_frames_meta,  # from cv2.CAP_PROP_FRAME_COUNT
             "selected_frame_count": ssim_result.selected_frame_count,
             "frame_indices":        ssim_result.frame_indices,
             "reduction_pct":        round(ssim_result.reduction_pct, 2),
