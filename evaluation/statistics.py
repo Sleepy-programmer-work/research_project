@@ -50,6 +50,7 @@ def compute_statistics(csv_path: str, out_path: str):
         
     group_cols = ["sampling_method", "aggregation_method", "caption_mode"]
     metrics = [
+        "frames_selected", "semantic_yield",
         "processing_time_s", "peak_vram_mb", "peak_ram_delta_mb", "gpu_utilization_pct", 
         "cider", "bleu1", "bleu4", "rouge_l", "meteor"
     ]

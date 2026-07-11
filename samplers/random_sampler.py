@@ -19,6 +19,15 @@ class RandomSampler(BaseSampler):
         video frame positions so frame_extraction.py can write correct temporal
         metadata to results/frame_selection/ JSON files.
         """
+        result = self.sample_with_metadata(video_path)
+        return result["frames"]
+
+    def sample_with_metadata(self, video_path: str) -> dict:
+        """Randomly sample frames and return frames + metadata dict.
+
+        Returns the same schema as TASSSampler.sample_with_metadata() so the
+        benchmark loop can extract per-video frames_selected counts.
+        """
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -27,9 +36,9 @@ class RandomSampler(BaseSampler):
         if total_frames <= 0 or fps <= 0:
             # Fallback: delegate to FPS1Sampler and inherit its indices
             fps1 = FPS1Sampler()
-            frames = fps1.sample(video_path)
+            result = fps1.sample_with_metadata(video_path)
             self._last_sampled_indices = fps1.get_last_sampled_indices()
-            return frames
+            return result
 
         target_count = max(1, int(np.ceil(total_frames / fps)))
 
@@ -59,4 +68,16 @@ class RandomSampler(BaseSampler):
 
         cap.release()
         self._last_sampled_indices = indices  # actual video frame positions
-        return frames
+        return {
+            "frames": frames,
+            "indices": indices,
+            "meta": {
+                "frames_original": frame_idx,
+                "candidate_pool_size": len(frames),
+                "frames_degenerate_dropped": 0,
+                "tass_stopped_early": False,
+                "vlm_calls": len(frames),
+                "fallback_used": False,
+            },
+        }
+

@@ -1,6 +1,8 @@
 experiment:
   videos: 10
-  dataset: "friedrichor/MSVD"
+  # Active dataset: MSR-VTT via Kaggle (vishnutheepb/msrvtt).
+  # Switched from MSVD (friedrichor/MSVD) — MSVD code preserved in benchmark_data.py.
+  dataset: "vishnutheepb/msrvtt"
   seed: 42
   output_dir: "./results"
   cache_dir: "./cache"
@@ -26,6 +28,7 @@ pipeline:
     - "ssim_085"
     - "ssim_090"
     - "ssim_095"
+    - "tass_adaptive"
   aggregators:
     - "raw"
     - "centroid"

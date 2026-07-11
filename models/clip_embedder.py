@@ -135,16 +135,32 @@ class MobileCLIPEmbedder:
 
         all_embeddings: list[np.ndarray] = []
 
+        import torchvision.transforms.functional as TF
+        from torchvision.transforms import InterpolationMode
+        CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
+        CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
+
         for start in range(0, len(frames), batch_size):
             chunk = frames[start : start + batch_size]
 
-            # BGR (OpenCV) → RGB (PIL) channel reversal — numpy view, zero-copy
-            pil_images = [Image.fromarray(f[:, :, ::-1]) for f in chunk]
-
-            # Apply CLIP preprocessing (resize, centre-crop, normalise)
-            tensors = torch.stack(
-                [self.preprocess(img) for img in pil_images]
-            ).to(self.DEVICE)
+            resized_tensors = []
+            for f in chunk:
+                # 1. Convert BGR to RGB and ensure contiguous memory
+                rgb = np.ascontiguousarray(f[:, :, ::-1])
+                
+                # 2. To tensor (C, H, W)
+                t = torch.from_numpy(rgb).permute(2, 0, 1)
+                
+                # 3. Convert to float and scale
+                t = t.float() / 255.0
+                
+                # 4. Resize and crop individually to prevent huge batched float32 allocations
+                t = TF.resize(t, 256, interpolation=InterpolationMode.BICUBIC, antialias=True)
+                t = TF.center_crop(t, 256)
+                resized_tensors.append(t)
+                
+            tensors = torch.stack(resized_tensors)
+            tensors = TF.normalize(tensors, mean=CLIP_MEAN, std=CLIP_STD).to(self.DEVICE)
 
             with torch.no_grad():
                 features = self.model.encode_image(tensors)

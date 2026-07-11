@@ -1,5 +1,4 @@
-```
-# Microsoft Office files
+# ─── Microsoft Office files ───────────────────────────────────────────────────
 *.docx
 *.doc
 *.xls
@@ -12,22 +11,21 @@
 *.vsd
 *.vsdx
 
-# Temporary files
+# ─── Temporary files ──────────────────────────────────────────────────────────
 *.tmp
 *~
 .DS_Store
 Thumbs.db
 
-# Logs
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 
-# Environment files
+# ─── Environment files ────────────────────────────────────────────────────────
 .env
 .env.local
 *.env.*
 
-# Dependencies
-node_modules/
+# ─── Python & dependency caches ───────────────────────────────────────────────
 .venv/
 venv/
 __pycache__/
@@ -37,14 +35,27 @@ __pycache__/
 coverage/
 htmlcov/
 cache/
-tests/
 
-# Results and logs
-results/**
-!results/**/
-!results/**/.gitkeep
+# ─── Test cache (keep tests/ folder and source files) ─────────────────────────
+tests/__pycache__/
+tests/.pytest_cache/
 
-# Build artifacts
+# ─── Results: keep folder structure, ignore all files ─────────────────────────
+# Allow directories (so git tracks the folder skeleton)
+results/**/
+!results/
+!results/csv/
+!results/plots/
+!results/reports/
+!results/frame_selection/
+!results/captions/
+!results/metadata/
+!results/logs/
+!results/cache/
+# Ignore every file inside any results subdirectory
+results/**/*
+
+# ─── Build artifacts ──────────────────────────────────────────────────────────
 dist/
 build/
 target/
@@ -58,13 +69,13 @@ target/
 *.a
 *.out
 
-# Editors
+# ─── Editors ──────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Compressed files
+# ─── Compressed files ─────────────────────────────────────────────────────────
 *.zip
 *.gz
 *.tar
@@ -88,8 +99,6 @@ target/
 *.tar.xz
 *.tar.zst
 
-# Change logs
-CHANGES.md
-changes_log_prod.md
-
-```
+# ─── Project-specific ignores ─────────────────────────────────────────────────
+TASS.md
+flowchart.md

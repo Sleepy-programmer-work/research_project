@@ -14,6 +14,15 @@ class FPS2Sampler(BaseSampler):
         (not sequential 0,1,2,...) so frame_extraction.py can write correct
         temporal metadata to results/frame_selection/ JSON files.
         """
+        result = self.sample_with_metadata(video_path)
+        return result["frames"]
+
+    def sample_with_metadata(self, video_path: str) -> dict:
+        """Select 2 fps frames and return frames + metadata dict.
+
+        Returns the same schema as TASSSampler.sample_with_metadata() so the
+        benchmark loop can extract per-video frames_selected counts.
+        """
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps <= 0:
@@ -35,4 +44,16 @@ class FPS2Sampler(BaseSampler):
 
         cap.release()
         self._last_sampled_indices = indices
-        return frames
+        return {
+            "frames": frames,
+            "indices": indices,
+            "meta": {
+                "frames_original": frame_idx,
+                "candidate_pool_size": len(frames),
+                "frames_degenerate_dropped": 0,
+                "tass_stopped_early": False,
+                "vlm_calls": len(frames),
+                "fallback_used": False,
+            },
+        }
+

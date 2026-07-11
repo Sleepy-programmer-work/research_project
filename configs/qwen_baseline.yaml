@@ -1,0 +1,24 @@
+experiment:
+  videos: 10
+  dataset: "friedrichor/MSVD"
+  seed: 42
+  output_dir: "./results/qwen_baseline"
+  cache_dir: "./cache"
+
+qwen_vl:
+  provider: "ollama"
+  model: "qwen2.5vl:3b"
+  ollama_endpoint: "http://172.31.64.1:11434"
+  ollama_digest: "fb90415cde1e"
+  frames_per_video: 16
+  max_new_tokens: 60
+  prompt: >
+    You are a video understanding system.
+
+    Analyze all provided frames from the same video.
+
+    Generate a concise caption describing the primary action and context of the video.
+
+    Output exactly one sentence.
+
+    Do not use conversational phrases.
