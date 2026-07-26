@@ -2,10 +2,10 @@
 samplers/tass.py — Two-Stage Adaptive Semantic Sampling (TASS) Engine.
 
 Architecture overview:
-  Stage 1 — Streaming Degenerate Purge + Grid-SSIM Pre-filter  (CPU, O(N))
+  Stage 1 — Streaming Degenerate Purge + pHash Pre-filter  (CPU, O(N))
     1a. Degenerate Frame Detector: drops flash/fade/lens-cap frames.
-    1b. 2×2 Grid-SSIM Quadrant Filter: accepts frames where any spatial
-        quadrant changes significantly (minimum score < threshold).
+    1b. pHash Perceptual Filter: accepts frames where the Hamming distance
+        between perceptual hashes exceeds a threshold.
 
   Stage 2 — Micro-Batched MobileCLIP + Greedy Farthest-Point Sampling (CPU, O(M))
     2a. MobileCLIP-S1 encodes each Stage-1 candidate into a 512-d embedding.
@@ -16,7 +16,7 @@ Modes:
   'fixed':    Selects exactly K = ceil(duration_seconds) frames.
   'adaptive': Selects until the candidate pool is exhausted or early-stop fires.
 
-Pure algorithmic helpers (is_degenerate, grid_ssim, greedy_fps) live in
+Pure algorithmic helpers (is_degenerate, get_phash, phash_distance, greedy_fps) live in
 tass_helpers.py for unit-testability independent of the sampler class.
 """
 
@@ -45,7 +45,7 @@ class TASSSampler(BaseSampler):
     _MAX_CANDIDATES = 2000
     # Stage 1 operates at ~10 effective fps (every 3rd frame of a typical 30fps
     # source).  This is sufficient to capture scene transitions above 100ms
-    # duration while reducing I/O and SSIM computation by ~3×.
+    # duration while reducing I/O and pHash computation by ~3×.
     _STAGE1_STRIDE = 3
 
     def __init__(self, mode: str = "fixed", threshold: float = 0.90,

@@ -13,7 +13,7 @@ def extract_frames(video_path: str, video_id: str, sampler: BaseSampler) -> List
     zero-based position in the source video file of frames[i] — NOT a
     sequential placeholder.
 
-    Note: SSIMSampler and TASSSampler are handled via their own
+    Note: PHashSampler and TASSSampler are handled via their own
     sample_with_metadata() paths in run_benchmark.py and do not go through
     this function.  This function is only called for FPS1/FPS2/Random.
     """

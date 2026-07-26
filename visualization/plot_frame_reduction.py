@@ -18,18 +18,27 @@ from visualization.plot_utils import apply_theme
 
 logger = logging.getLogger(__name__)
 
-_SSIM_COLOURS = ["#E76F51", "#2A9D8F", "#264653"]
+# Colour palette for benchmark methods
+_METHOD_COLOURS = {
+    "phash":         "#E76F51",
+    "tass_adaptive": "#2A9D8F",
+    "tass_fixed":    "#264653",
+    "fps1":          "#ADB5BD",
+    "fps2":          "#868E96",
+    "random":        "#CED4DA",
+}
+_DEFAULT_COLOUR = "#ADB5BD"
 
 
 def plot_frame_reduction(frame_selection_dir: Path, output_dir: Path) -> None:
-    """Fig 8: Frame reduction % by SSIM method (box plot)."""
+    """Fig 8: Frame reduction % by sampling method (box plot)."""
     if not frame_selection_dir.exists():
         logger.warning(f"frame_selection directory not found: {frame_selection_dir} — skipping Fig 8")
         return
 
     records = _load_records(frame_selection_dir)
     if not records:
-        logger.warning("No SSIM frame_selection metadata found — skipping Fig 8.")
+        logger.warning("No frame_selection metadata found — skipping Fig 8.")
         return
 
     df = pd.DataFrame(records)
@@ -48,7 +57,7 @@ def plot_frame_reduction(frame_selection_dir: Path, output_dir: Path) -> None:
     ax.set_ylabel("Frame reduction (%)")
     ax.set_xlabel("Sampling method")
     ax.set_title(
-        "Fig 8: Frame Reduction % by Sampling Method\n(SSIM variants vs. original video frame count)",
+        "Fig 8: Frame Reduction % by Sampling Method\n(per-method vs. original video frame count)",
         weight="bold", pad=12,
     )
     ax.set_ylim(bottom=0)
@@ -58,38 +67,53 @@ def plot_frame_reduction(frame_selection_dir: Path, output_dir: Path) -> None:
     for fmt in ("png", "pdf"):
         fig.savefig(output_dir / f"fig8_frame_reduction.{fmt}", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Fig 8 saved: {len(records)} records, {len(method_order)} methods.")
+    logger.info(f"Fig 8 saved: {len(records)} records across {len(method_order)} methods ({method_order}).")
 
 
 def _load_records(frame_selection_dir: Path) -> list:
-    records = []
+    raw_metas = []
+    video_orig_map = {}
+
+    # First pass: load json files and build map of video_id -> original_frame_count
     for json_file in sorted(frame_selection_dir.glob("*.json")):
         try:
             meta = json.loads(json_file.read_text())
+            raw_metas.append(meta)
+            v_id = meta.get("video_id")
+            orig = meta.get("original_frame_count")
+            if v_id and orig and orig > 0:
+                video_orig_map[v_id] = orig
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning(f"Could not read {json_file.name}: {exc}")
             continue
-        if meta.get("reduction_pct") is not None:
+
+    records = []
+    for meta in raw_metas:
+        v_id = meta.get("video_id")
+        orig = meta.get("original_frame_count") or video_orig_map.get(v_id)
+        selected = meta.get("selected_frame_count")
+        
+        red_pct = meta.get("reduction_pct")
+        if red_pct is None and orig and orig > 0 and selected is not None:
+            red_pct = round((1.0 - selected / orig) * 100.0, 2)
+
+        if red_pct is not None:
             records.append({
                 "method": meta["sampler"],
-                "reduction_pct": meta["reduction_pct"],
-                "video_id": meta.get("video_id", json_file.stem),
+                "reduction_pct": red_pct,
+                "video_id": v_id,
             })
     return records
 
 
 def _sort_methods(methods) -> list:
-    return sorted(
-        methods,
-        key=lambda m: (0, float(m.split("_")[1]) / 100) if m.startswith("ssim_") else (1, m),
-    )
+    """Sort methods: fps variants first, then phash, then tass, then others."""
+    priority = {"fps1": 0, "fps2": 1, "random": 2, "phash": 3, "tass_fixed": 4, "tass_adaptive": 5}
+    return sorted(methods, key=lambda m: (priority.get(m, 99), m))
 
 
 def _colour_boxes(boxes, method_order: list) -> None:
-    ssim_idx = 0
     for patch, label in zip(boxes, method_order):
-        colour = _SSIM_COLOURS[ssim_idx % len(_SSIM_COLOURS)] if label.startswith("ssim_") else "#ADB5BD"
-        if label.startswith("ssim_"):
-            ssim_idx += 1
+        colour = _METHOD_COLOURS.get(label, _DEFAULT_COLOUR)
         patch.set_facecolor(colour)
         patch.set_alpha(0.75)

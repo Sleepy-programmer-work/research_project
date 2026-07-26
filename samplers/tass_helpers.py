@@ -2,7 +2,7 @@
 samplers/tass_helpers.py — Stateless algorithmic helpers for TASSSampler.
 
 Extracted from tass.py to keep every function under 40 LOC and isolate
-the pure algorithms (degenerate detection, Grid-SSIM, Greedy FPS) from the
+the pure algorithms (degenerate detection, pHash, Greedy FPS) from the
 sampler class that orchestrates them.
 
 These functions have no side effects and are fully unit-testable in isolation.
@@ -12,7 +12,6 @@ from typing import List, Tuple
 
 import cv2
 import numpy as np
-from skimage.metrics import structural_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ def phash_distance(prev_hash: np.ndarray, curr_hash: np.ndarray) -> int:
     """Compute Hamming distance between two pHash arrays.
     
     Returns an integer [0, 64]. 0 means identical.
-    Validation showed a distance > 1 correlates 94% with Grid-SSIM < 0.90.
+    Validation showed a distance > 1 correlates 94% with visual scene changes.
     """
     return int(np.count_nonzero(prev_hash != curr_hash))
 

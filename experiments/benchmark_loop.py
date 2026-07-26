@@ -18,7 +18,7 @@ import torch
 
 from evaluation.telemetry import PeakResourceTracker
 from pipeline import extract_frames, caption_frames, transcribe_audio, build_context, generate_final_caption
-from samplers import SSIMSampler, TASSSampler
+from samplers import TASSSampler, PHashSampler
 from samplers.fps1 import FPS1Sampler
 from utils.gpu import flush_vram
 
@@ -119,42 +119,30 @@ def run_video_pipeline(
 
 def _extract_frames(sampler, video_id: str, video_path: str, out_dir: Path):
     """Dispatch to the correct sampler path; write frame-selection JSON."""
-    ssim_result = tass_meta = tass_indices = None
+    tass_meta = tass_indices = None
     if hasattr(sampler, "sample_with_metadata"):
         result = sampler.sample_with_metadata(video_path)
         frames, tass_meta, tass_indices = result["frames"], result["meta"], result["indices"]
-        if isinstance(sampler, SSIMSampler):
-            ssim_result = result
     else:
         frames = extract_frames(video_path, video_id, sampler)
-    save_frame_selection_meta(out_dir, video_id, sampler, frames, ssim_result, tass_meta, tass_indices)
+    save_frame_selection_meta(out_dir, video_id, sampler, frames, tass_meta, tass_indices)
     return frames, tass_meta
 
 
 
-def save_frame_selection_meta(out_dir, video_id, sampler, frames, ssim_result=None, tass_meta=None, tass_indices=None):
+def save_frame_selection_meta(out_dir, video_id, sampler, frames, tass_meta=None, tass_indices=None):
     """Write per-video frame-selection metadata JSON to results/frame_selection/."""
-    if ssim_result is not None:
+    if tass_meta is not None:
+        original = tass_meta.get("frames_original", None)
+        selected = len(frames)
+        reduction = round((1.0 - selected / max(original, 1)) * 100.0, 2) if original and original > 0 else None
         meta = {
             "sampler": sampler.get_name(), "video_id": video_id,
-            "original_frame_count": ssim_result.original_frame_count,
-            "total_frames_meta": ssim_result.total_frames_meta,
-            "selected_frame_count": ssim_result.selected_frame_count,
-            "frame_indices": ssim_result.frame_indices,
-            "reduction_pct": round(ssim_result.reduction_pct, 2),
-            "average_ssim": round(ssim_result.average_ssim, 4),
-            "threshold_used": ssim_result.threshold_used,
-            "fallback_used": ssim_result.fallback_used,
-            "fps": ssim_result.fps,
-        }
-    elif tass_meta is not None:
-        meta = {
-            "sampler": sampler.get_name(), "video_id": video_id,
-            "original_frame_count": tass_meta.get("frames_original", None), 
-            "selected_frame_count": len(frames),
-            "frame_indices": tass_indices if tass_indices else [], 
-            "reduction_pct": None, "average_ssim": None,
-            "threshold_used": getattr(sampler, 'threshold', None), 
+            "original_frame_count": original,
+            "selected_frame_count": selected,
+            "frame_indices": tass_indices if tass_indices else [],
+            "reduction_pct": reduction,
+            "threshold_used": getattr(sampler, 'threshold', getattr(sampler, 'hamming_threshold', None)),
             "fallback_used": tass_meta.get("fallback_used", False),
             "fps": None,
         }
@@ -162,7 +150,7 @@ def save_frame_selection_meta(out_dir, video_id, sampler, frames, ssim_result=No
         meta = {
             "sampler": sampler.get_name(), "video_id": video_id,
             "original_frame_count": None, "selected_frame_count": len(frames),
-            "frame_indices": [], "reduction_pct": None, "average_ssim": None,
+            "frame_indices": [], "reduction_pct": None,
             "threshold_used": None, "fallback_used": False, "fps": None,
         }
     path = out_dir / "frame_selection" / f"{video_id}_{sampler.get_name()}.json"

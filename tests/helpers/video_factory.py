@@ -57,7 +57,7 @@ def static_nondegenerate_frame(width: int = 320, height: int = 180) -> np.ndarra
     """Spatially-varied gradient frame that:
       - Passes the degenerate filter (mean≈128, var>>80)
       - Looks identical to every other call with the same size
-      - Has SSIM ≈ 1.0 with consecutive copies after XVID encoding
+      - Has pHash distance ≈ 0 with consecutive copies after XVID encoding
 
     Horizontal gradient from 20→230 gives mean≈125 and var≈3500,
     comfortably above the var<80 degenerate threshold.
@@ -72,7 +72,7 @@ def static_nondegenerate_frame(width: int = 320, height: int = 180) -> np.ndarra
 
 def scene_frame(scene_id: int, width: int = 320, height: int = 180) -> np.ndarray:
     """Distinct-scene frame: coloured circle on gradient background.
-    Each scene_id produces a visually different frame for SSIM/semantic testing.
+    Each scene_id produces a visually different frame for pHash/semantic testing.
     """
     frame = static_nondegenerate_frame(width, height).copy()
     cx = (scene_id * 73 + 50) % (width - 40) + 20

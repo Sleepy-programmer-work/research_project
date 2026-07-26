@@ -25,9 +25,7 @@ pipeline:
     - "fps1"
     - "fps2"
     - "random"
-    - "ssim_085"
-    - "ssim_090"
-    - "ssim_095"
+    - "phash"
     - "tass_adaptive"
   aggregators:
     - "raw"
@@ -36,23 +34,3 @@ pipeline:
   caption_modes:
     - "vlm_only"
     - "vlm_plus_llm"
-
-# SSIM sampler configuration
-# All keys are read by SSIMSampler via config.settings.Settings.ssim
-# and by experiments/run_benchmark.py via the SSIM_VARIANTS mapping.
-#
-# Benchmark matrix note: adding ssim_085 + ssim_090 + ssim_095 expands the
-# experiment matrix from 18 → 36 configurations (6 samplers × 3 aggregators
-# × 2 modes). On a 50-video run this roughly doubles wall-clock time.
-# Run a 10-video test with --sampler ssim_090 first before a full sweep.
-ssim:
-  compare_size: [256, 144]    # [width, height] for resize-before-compare (16:9 @ 256px)
-  win_size: 7                 # SSIM window size — must be odd, ≤ min(H, W) of compare_size
-  min_accepted_frames: 1      # always keep at least this many frames
-  max_accepted_frames: 500    # hard cap — prevents pathological videos from OOM
-  acceptance_rate_min: 0.01   # below this → FPS-1 fallback (threshold too aggressive)
-  acceptance_rate_max: 0.99   # above this → warning only (threshold too permissive)
-  variants:
-    ssim_085: 0.85            # aggressive — catches more scene changes
-    ssim_090: 0.90            # balanced   — recommended default
-    ssim_095: 0.95            # conservative — only major transitions

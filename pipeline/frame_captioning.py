@@ -35,7 +35,7 @@ def caption_frames(
         video_id:      Unique video identifier (used as cache key prefix).
         frames:        BGR numpy frames to caption.
         vlm:           Loaded VLMLoader instance.
-        method_name:   Sampler name (e.g. 'fps1', 'ssim_090').
+        method_name:   Sampler name (e.g. 'fps1', 'phash').
         vlm_model_id:  Override VLM model identifier. Defaults to settings.vlm_model_id.
         vlm_revision:  Override VLM revision/commit hash. Defaults to settings.vlm_revision.
                        Must never be empty — raises RuntimeError if it is.

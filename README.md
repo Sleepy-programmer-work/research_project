@@ -66,7 +66,7 @@ flowchart TD
     subgraph Video_Processing ["🎬 Video Processing"]
         direction TB
         InputVideo[("📹 Input Video")]:::input
-        FrameSampler["⚡ Frame Sampler\n(fps1 / fps2 / random / ssim_090 / tass_adaptive)"]:::process
+        FrameSampler["⚡ Frame Sampler\n(fps1 / fps2 / random / phash / tass_adaptive)"]:::process
     end
 
     subgraph Inference_Engine ["🧠 Inference Engine"]
@@ -102,9 +102,10 @@ All samplers implement the `BaseSampler` interface: `sample(video_path) → List
 ### 🎲 Random Sampling
 - Targets the same budget as FPS-1 (`ceil(total_frames / fps)`) but draws frame indices uniformly at random. Used primarily as a statistical control.
 
-### 🔍 SSIM-090 (Structural Similarity)
-- Triggers acceptance when the SSIM between the current frame and previous accepted frame drops below 0.90.
-- **Properties**: Content-aware (structural scene changes), mean frames: **34.44**. Operates in pixel-space only (visual change, not semantic change).
+### 🔍 pHash (Perceptual Hashing)
+- Uses DCT-based perceptual hashing to detect scene changes. Accepts a frame when the Hamming distance between its pHash and the previously accepted frame's pHash exceeds a threshold.
+- Includes a degenerate frame filter (drops dark/flat/blurry frames).
+- **Properties**: Content-aware (perceptual scene changes), operates at ~10 effective fps via stride-based reading. Lightweight CPU-only computation with no deep learning models.
 
 ### 🚀 TASS-Adaptive (Research Contribution)
 A two-stage pipeline for maximum semantic diversity:
@@ -168,7 +169,7 @@ TASS wins on **every efficiency-adjusted metric**:
 
 ```
 research_project/
-├── samplers/                   # Frame selection algorithms (tass, fps, ssim)
+├── samplers/                   # Frame selection algorithms (tass, fps, phash)
 ├── aggregation/                # Caption aggregation methods (raw, temporal, centroid)
 ├── models/                     # Model loaders (VLM, LLM, MobileCLIP)
 ├── pipeline/                   # Core pipeline stages (extraction, captioning)

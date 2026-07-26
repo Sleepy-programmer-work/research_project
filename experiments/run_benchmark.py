@@ -32,7 +32,7 @@ from visualization.plots import generate_plots
 
 from experiments.benchmark_setup import setup_logging, get_gpu_name, build_output_dirs, make_run_metadata
 from experiments.benchmark_data import ensure_dataset_videos
-from experiments.benchmark_samplers import get_samplers, get_aggregators, SSIM_VARIANTS
+from experiments.benchmark_samplers import get_samplers, get_aggregators
 from experiments.benchmark_loop import run_video_pipeline, compute_tass_row_metrics, cuda_sync, CUDAContextBrokenError
 from experiments.benchmark_report import generate_report
 

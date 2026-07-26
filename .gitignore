@@ -1,104 +1,101 @@
-# ─── Microsoft Office files ───────────────────────────────────────────────────
+# ─── Python & Dependency Caches ───────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.env/
+ENV/
+
+# ─── Testing & Tool Caches ───────────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+.tox/
+.nox/
+
+# ─── Application & Project Caches ────────────────────────────────────────────
+cache/
+.cache/
+results/cache/
+nltk_data/
+.huggingface/
+
+# ─── Serialized Data & Model Weights ─────────────────────────────────────────
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.h5
+
+# ─── Logs & Runtime Artefacts ────────────────────────────────────────────────
+*.log
+ollama.log
+logs/
+results/logs/
+*.pid
+*.seed
+
+# ─── Results Output Artefacts ─────────────────────────────────────────────────
+# Ignore all generated result files while preserving folder structure
+results/**/*
+!results/
+!results/**/
+!results/**/.gitkeep
+
+# ─── Temporary & OS System Files ──────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Environment & Secrets ───────────────────────────────────────────────────
+.env
+.env.local
+*.env.*
+
+# ─── Build & Distribution ────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ─── Editor & IDE Files ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+
+# ─── Office & Compressed Files ───────────────────────────────────────────────
 *.docx
 *.doc
 *.xls
 *.xlsx
 *.ppt
 *.pptx
-*.accdb
-*.mdb
-*.pub
-*.vsd
-*.vsdx
-
-# ─── Temporary files ──────────────────────────────────────────────────────────
-*.tmp
-*~
-.DS_Store
-Thumbs.db
-
-# ─── Logs ─────────────────────────────────────────────────────────────────────
-*.log
-
-# ─── Environment files ────────────────────────────────────────────────────────
-.env
-.env.local
-*.env.*
-
-# ─── Python & dependency caches ───────────────────────────────────────────────
-.venv/
-venv/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.coverage
-coverage/
-htmlcov/
-cache/
-
-# ─── Test cache (keep tests/ folder and source files) ─────────────────────────
-tests/__pycache__/
-tests/.pytest_cache/
-
-# ─── Results: keep folder structure, ignore all files ─────────────────────────
-# Allow directories (so git tracks the folder skeleton)
-results/**/
-!results/
-!results/csv/
-!results/plots/
-!results/reports/
-!results/frame_selection/
-!results/captions/
-!results/metadata/
-!results/logs/
-!results/cache/
-# Ignore every file inside any results subdirectory
-results/**/*
-
-# ─── Build artifacts ──────────────────────────────────────────────────────────
-dist/
-build/
-target/
-*.pyc
-*.class
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
-# ─── Editors ──────────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# ─── Compressed files ─────────────────────────────────────────────────────────
 *.zip
-*.gz
-*.tar
+*.tar.gz
 *.tgz
-*.bz2
-*.xz
 *.7z
 *.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 
-# ─── Project-specific ignores ─────────────────────────────────────────────────
+# ─── Project-Specific Documentation Ignores ─────────────────────────────────
 TASS.md
 flowchart.md

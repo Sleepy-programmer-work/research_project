@@ -74,21 +74,5 @@ class Settings:
     def pipeline(self) -> dict:
         return self.config.get("pipeline", {})
 
-    @property
-    def ssim(self) -> dict:
-        """
-        SSIM sampler configuration block from benchmark.yaml.
-
-        Keys (all optional — SSIMSampler falls back to safe defaults):
-          compare_size:        [width, height] for resize-before-compare (default: [256, 144])
-          win_size:            SSIM window size, must be odd (default: 7)
-          min_accepted_frames: minimum accepted frames guard (default: 1)
-          max_accepted_frames: hard cap on accepted frames (default: 500)
-          acceptance_rate_min: below this rate → FPS-1 fallback (default: 0.01)
-          acceptance_rate_max: above this rate → log warning only (default: 0.99)
-          variants:            dict mapping variant name → threshold float
-        """
-        return self.config.get("ssim", {})
-
 # Global settings instance
 settings = Settings()

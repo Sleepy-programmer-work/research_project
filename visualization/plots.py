@@ -5,7 +5,7 @@ Produces Figs 1-8 from the per-video benchmark CSV.
 
 Fig 1-6: Grouped bar charts (metric × pipeline config × caption mode)
 Fig 7:   Quality/latency Pareto scatter
-Fig 8:   Frame-reduction box plot for SSIM variants (see plot_frame_reduction)
+Fig 8:   Frame-reduction box plot for sampling methods (see plot_frame_reduction)
 """
 import logging
 import pandas as pd

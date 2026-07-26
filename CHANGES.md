@@ -4,6 +4,28 @@ This file documents all critical bug fixes, architectural changes, and research-
 
 ---
 
+## Phase 10 — SSIM Removal & Standalone pHash Benchmark Integration (July 2026)
+
+### 1. `samplers/phash_sampler.py` [NEW] — Standalone pHash Benchmark Sampler
+- **Feature**: Extracted TASS Stage 1's pHash scene-change filtering as an independent, standalone benchmark sampler (`PHashSampler`).
+- **Pipeline**: `Video → Frame Extraction → Degenerate Filter → pHash Filtering → Selected Frames`.
+- **Implementation**: Reuses existing `get_phash()`, `phash_distance()`, and `is_degenerate()` functions from `tass_helpers.py` without code duplication. Operates at ~10 effective FPS via stride-based frame reading, matching TASS Stage 1 behavior.
+
+### 2. Complete Removal of SSIM
+- **Refactoring**: Searched and removed all remaining SSIM references across samplers, experiment runners, configuration files, visualization scripts, tests, requirements, and documentation.
+- **Deletions**: Deleted `samplers/ssim.py`, `samplers/ssim_result.py`, `tests/test_ssim_sampler.py`, and `tests/test_ssim_sampler_invariants.py`. Removed `scikit-image` from `requirements.txt`.
+- **Cleaned Data**: Deleted obsolete SSIM cached captions and frame-selection JSONs; removed SSIM rows from all benchmark CSVs and report summaries.
+
+### 3. `visualization/plot_frame_reduction.py` — Dynamic Reduction Percentage Computation
+- **Fix**: Updated `_load_records()` to build a map of `video_id -> original_frame_count` across all JSON files and compute `reduction_pct` dynamically when `null`.
+- **Effect**: Enabled Fig 8 box plot to load and visualize all 5 benchmark samplers (`fps1`, `fps2`, `random`, `phash`, `tass_adaptive`) together in a single plot.
+
+### 4. Consolidated Benchmark Run & Documentation Updates
+- Executed 100-video evaluation run for `phash` and ran `experiments/combine_results.py` to regenerate all 8 combined publication figures, statistics CSVs, and markdown reports.
+- Updated `README.md` and `result_f.md` with final consolidated benchmark numbers and comparative insights across all 5 frame sampling techniques.
+
+---
+
 ## Phase 9 — Infrastructure Fixes & TASS Sampler Activation (July 2026)
 
 ### 1. `pipeline/context_builder.py` — Empty Captions Aggregation Guard
@@ -29,17 +51,17 @@ This file documents all critical bug fixes, architectural changes, and research-
 - **Bug**: `frame_extraction.py` saved sequential dummy indices `[0, 1, 2, ...]` instead of the actual frame indices selected by the sampler, causing incorrect temporal metadata.
 - **Fix**: Extended the sampler API by adding a default `get_last_sampled_indices()` method to `BaseSampler`. Updated `FPS1Sampler`, `FPS2Sampler`, and `RandomSampler` to track and return actual video frame indices. Updated `frame_extraction.py` to save these actual indices via `sampler.get_last_sampled_indices()`.
 
-### 3. `samplers/ssim.py` — SSIM Fallback Scores & Metadata Fields
-- **Bug**: When the SSIM sampler fell back or failed, it returned `0.0` scores (`[0.0] * n`), leading to silent metrics corruption and misleading data.
-- **Fix**: Changed fallback scores from `0.0` to `None` to clearly represent the absence of scores. Added a `total_frames_meta` field to `SSIMSamplerResult` to track the total frame count declared in the video container.
+### 3. `samplers/` [REMOVED] — Historical: Legacy Sampler Fallback Scores & Metadata Fields
+- **Bug**: When the legacy perceptual sampler fell back or failed, it returned `0.0` scores (`[0.0] * n`), leading to silent metrics corruption and misleading data.
+- **Fix**: Changed fallback scores from `0.0` to `None` to clearly represent the absence of scores. *(Note: This sampler has since been replaced by pHash-based perceptual filtering.)*
 
 ### 4. `pipeline/frame_captioning.py` & `configs/benchmark.yaml` — Cache Key VLM Model & Revision Pinning
 - **Bug**: The VLM captioning cache key did not include the model name or revision. If the model changed, stale cached captions were silently reused.
 - **Fix**: Updated the cache key format to: `{video_id}_{method}_{model_safe}_{revision_safe}.json`. Added `vlm_model_id` and `vlm_revision` properties to `config/settings.py` enforcing a hardcoded default revision of `"2024-08-26"`. Pinned `revision: "2024-08-26"` under `models.vlm` in `configs/benchmark.yaml`.
 
-### 5. `samplers/ssim.py` — SSIM Frame Reduction Denominator Correction
-- **Bug**: The SSIM frame reduction percentage formula used the physically decoded frame count (`actual_total`) as the denominator, skewing results for truncated videos.
-- **Fix**: Changed the denominator to use the video container's metadata frame count (`total_frames_meta`). Added a debug logging warning when `actual_total` differs from `total_frames_meta`.
+### 5. `samplers/` [REMOVED] — Historical: Legacy Sampler Frame Reduction Denominator Correction
+- **Bug**: The legacy perceptual sampler's frame reduction percentage formula used the physically decoded frame count (`actual_total`) as the denominator, skewing results for truncated videos.
+- **Fix**: Changed the denominator to use the video container's metadata frame count (`total_frames_meta`). *(Note: This sampler has since been replaced by pHash-based perceptual filtering.)*
 
 ### 6. `models/clip_embedder.py` — Cosine Distance Norm Assertion
 - **Bug**: Cosine distance in TASS Stage 2 assumes L2-normalized embeddings but had no runtime assertion checking this invariant.
@@ -148,17 +170,17 @@ Implemented `MobileCLIPEmbedder` using a CPU-only Singleton pattern.
 
 ## Phase 1 — Prompt & Evaluation Patches (March 2026)
 
-### 1. LLM Verbosity Constraint (`pipeline/context_builder.py`)
+### 1. `pipeline/context_builder.py` — LLM Verbosity Constraint
 - Replaced relaxed task instruction with a structured `SYSTEM_PROMPT` enforcing exactly one sentence, ≤15 words, literal action focus, no conversational filler.
 
-### 2. `pycocoevalcap` Dictionary Key Mismatch Fix (`evaluation/metrics.py`)
+### 2. `evaluation/metrics.py` — `pycocoevalcap` Dictionary Key Mismatch Fix
 - Added explicit `str(k)` casting for all prediction and ground-truth dictionary keys before passing to the COCO evaluator.
 
-### 3. VRAM/RAM Telemetry Initial Fix (`experiments/run_benchmark.py`)
+### 3. `experiments/run_benchmark.py` — VRAM/RAM Telemetry Initial Fix
 - Implemented the first threaded polling tracker class utilizing `pynvml` and `psutil`.
 
 ### 4. End-to-End Pipeline Timing Fix
 - Hoisted OpenCV frame decoding, transcription, and captioning above the aggregation loop, ensuring `processing_time_s` measures start-to-finish duration.
 
-### 5. `NaN` Protection in Statistics (`evaluation/statistics.py`)
+### 5. `evaluation/statistics.py` — `NaN` Protection in Statistics
 - Added safe standard deviation checks returning the mean when `std == 0.0` to prevent division-by-zero.
