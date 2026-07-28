@@ -1,7 +1,5 @@
 """
 experiments/benchmark_report.py — Markdown report generation from benchmark CSV.
-
-Extracted from benchmark_loop.py to keep every source file under 200 LOC.
 """
 import logging
 from pathlib import Path

@@ -1,8 +1,5 @@
 """
 evaluation/cider_scorer.py — Custom CIDEr scorer with precomputed corpus IDF.
-
-Extracted from metrics.py to keep each file under 200 LOC and give the
-scorer a clear single responsibility.
 """
 import math
 import numpy as np

@@ -1,7 +1,6 @@
 """
 evaluation/caption_io.py — File I/O for raw caption results.
 
-Extracted from metrics.py to maintain single responsibility:
 metrics.py computes scores; caption_io.py writes caption artefacts to disk.
 """
 import json

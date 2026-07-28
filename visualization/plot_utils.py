@@ -1,7 +1,5 @@
 """
 visualization/plot_utils.py — Shared style and chart helpers for benchmark plots.
-
-Extracted from plots.py to keep every file under 200 LOC.
 """
 import matplotlib.pyplot as plt
 import seaborn as sns

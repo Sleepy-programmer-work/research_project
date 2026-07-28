@@ -1,8 +1,7 @@
 """
 samplers/tass_helpers.py — Stateless algorithmic helpers for TASSSampler.
 
-Extracted from tass.py to keep every function under 40 LOC and isolate
-the pure algorithms (degenerate detection, pHash, Greedy FPS) from the
+Isolates pure algorithms (degenerate detection, pHash, Greedy FPS) from the
 sampler class that orchestrates them.
 
 These functions have no side effects and are fully unit-testable in isolation.

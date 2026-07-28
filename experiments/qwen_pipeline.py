@@ -1,8 +1,7 @@
 """
 experiments/qwen_pipeline.py — Per-video processing for the Qwen VL baseline.
 
-Extracted from run_qwen_baseline.py to keep every file under 200 LOC and
-separate the per-video pipeline logic from the CLI orchestration.
+Separates the per-video pipeline logic from the CLI orchestration.
 """
 import json
 import logging

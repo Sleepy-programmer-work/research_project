@@ -1,8 +1,6 @@
 """
 visualization/plot_frame_reduction.py — Fig 8: Frame-reduction box plot.
 
-Extracted from plots.py to keep every file under 200 LOC.
-
 Reads per-video JSON artefacts from results/frame_selection/ written by
 save_frame_selection_meta() and plots reduction % by sampling method.
 """
